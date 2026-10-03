@@ -59,6 +59,7 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
   it("keeps Claude, Codex, Cursor, OpenCode, and ACP on HTTP when unset", () => {
     withSession(undefined, (threadId) => {
       const claude = claudeMcpQueryOverrides({ threadId, readOnlySandbox: false });
+      assert.isUndefined(claude.mcpEnvironment);
       assert.deepEqual(claude.mcpServers, {
         "t3-code": {
           type: "http",
@@ -104,15 +105,22 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
         [T3_MCP_URL_ENV]: endpoint,
         [T3_MCP_AUTHORIZATION_ENV]: token,
       };
-      const claudeServer = claudeMcpQueryOverrides({ threadId, readOnlySandbox: false })
-        .mcpServers?.["t3-code"];
-      assert.deepEqual(claudeServer, {
+      const claude = claudeMcpQueryOverrides({ threadId, readOnlySandbox: false });
+      assert.deepEqual(claude.mcpServers?.["t3-code"], {
         type: "stdio",
         command: binary,
         args: ["--fixed"],
-        env: expectedEnv,
+        env: {
+          [T3_MCP_URL_ENV]: `\${${T3_MCP_URL_ENV}}`,
+          [T3_MCP_AUTHORIZATION_ENV]: `\${${T3_MCP_AUTHORIZATION_ENV}}`,
+        },
         timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
       });
+      // The SDK serializes mcpServers onto the CLI command line, so the
+      // credential must only reach the CLI through its environment.
+      assert.isFalse(JSON.stringify(claude.mcpServers).includes(token));
+      assert.isFalse(JSON.stringify(claude.mcpServers).includes(endpoint));
+      assert.deepEqual(claude.mcpEnvironment, expectedEnv);
       const codexServer = (
         codexThreadRuntimeParams({ threadId }).config.mcp_servers as {
           readonly "t3-code": unknown;

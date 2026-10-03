@@ -967,6 +967,8 @@ export function claudeMcpQueryOverrides(input: {
 }): {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+  /** Values the stdio wrapper's ${VAR} references resolve from in the CLI environment. */
+  readonly mcpEnvironment?: Readonly<Record<string, string>>;
 } {
   const session = McpProviderSession.readMcpProviderSession(input.threadId);
   if (session === undefined) {
@@ -993,10 +995,17 @@ export function claudeMcpQueryOverrides(input: {
               type: "stdio",
               command: transport.command,
               args: [...transport.args],
-              env: { ...transport.env },
+              // The SDK hands mcpServers to the CLI as a --mcp-config argument,
+              // which any local user can read from the process list. The CLI
+              // expands ${VAR} in that config, so only the names go on the
+              // command line and the values travel in the CLI's environment.
+              env: Object.fromEntries(
+                Object.keys(transport.env).map((name) => [name, `\${${name}}`]),
+              ),
               timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
             },
     },
+    ...(transport.kind === "stdio" ? { mcpEnvironment: { ...transport.env } } : {}),
   };
 }
 
@@ -6869,7 +6878,7 @@ export function makeClaudeAdapterV2(
           nativeThreadId: string,
         ) {
           const queryPolicy = claudeRuntimeQueryPolicyForRuntimePolicy(turnInput.runtimePolicy);
-          const mcpOverrides = claudeMcpQueryOverrides({
+          const { mcpEnvironment, ...mcpOverrides } = claudeMcpQueryOverrides({
             threadId: turnInput.threadId,
             readOnlySandbox:
               sandboxPolicyKindForClaudeRuntimePolicy(turnInput.runtimePolicy) === "readOnly",
@@ -6953,7 +6962,10 @@ export function makeClaudeAdapterV2(
             cwd: turnInput.runtimePolicy.cwd,
             attachmentsDir,
             settings: adapterOptions.settings,
-            environment: adapterOptions.environment,
+            environment:
+              mcpEnvironment === undefined
+                ? adapterOptions.environment
+                : { ...(adapterOptions.environment ?? process.env), ...mcpEnvironment },
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
             ...mcpOverrides,
             permissionMode: queryPolicy.permissionMode,
