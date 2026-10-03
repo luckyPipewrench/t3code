@@ -93,6 +93,12 @@ describe("resolveT3McpTransport", () => {
 });
 
 describe("parseMcpStdioWrapperCommand", () => {
+  it("preserves empty quoted fixed arguments", () => {
+    assert.deepEqual(parseMcpStdioWrapperCommand(`/opt/wrap "" --flag ''`), {
+      command: "/opt/wrap",
+      args: ["", "--flag", ""],
+    });
+  });
   it("keeps quoted arguments together and does not expand them", () => {
     assert.deepEqual(parseMcpStdioWrapperCommand(`/opt/wrap --flag "two words" 'a$b'`), {
       command: "/opt/wrap",

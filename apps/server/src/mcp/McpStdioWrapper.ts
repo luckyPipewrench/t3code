@@ -110,9 +110,6 @@ export function parseMcpStdioWrapperCommand(value: string): {
   if (command === undefined || command.length === 0) {
     fail("the command is empty");
   }
-  if (tokens.slice(1).some((argument) => argument.length === 0)) {
-    fail("the command has an empty argument");
-  }
   return { command, args: tokens.slice(1) };
 }
 
