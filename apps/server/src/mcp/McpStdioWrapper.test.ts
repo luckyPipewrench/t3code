@@ -3,6 +3,8 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 import { assert, describe, it } from "@effect/vitest";
 
 import {
@@ -23,7 +25,7 @@ const session = {
 describe("resolveT3McpTransport", () => {
   const executable = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-mcp-wrapper-"));
   const binary = NodePath.join(executable, "wrapper");
-  NodeFS.writeFileSync(binary, "");
+  NodeFS.writeFileSync(binary, "", { mode: 0o700 });
 
   it("leaves the HTTP transport unchanged when the setting is unset", () => {
     assert.deepEqual(resolveT3McpTransport(session, { environment: {} }), {
@@ -79,6 +81,21 @@ describe("resolveT3McpTransport", () => {
       assert.notInclude(error.message, "fixture-session-token");
     }
   });
+
+  it.skipIf(HostProcessPlatform.defaultValue() === "win32")(
+    "refuses a file without execute permission",
+    () => {
+      const path = NodePath.join(executable, "not-executable");
+      NodeFS.writeFileSync(path, "#!/bin/sh\n", { mode: 0o600 });
+      assert.throws(
+        () =>
+          resolveT3McpTransport(session, {
+            environment: { [T3_MCP_STDIO_WRAPPER_ENV]: path },
+          }),
+        McpStdioWrapperConfigError,
+      );
+    },
+  );
 
   it("treats a directory as a missing executable", () => {
     try {

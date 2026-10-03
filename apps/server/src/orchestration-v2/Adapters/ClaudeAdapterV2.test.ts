@@ -650,7 +650,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     const threadId = ThreadId.make("thread-claude-mcp-wrapper-rotation");
     const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-claude-wrapper-"));
     const wrapper = NodePath.join(directory, "wrapper");
-    NodeFS.writeFileSync(wrapper, "");
+    NodeFS.writeFileSync(wrapper, "", { mode: 0o700 });
     const previous = process.env.T3_MCP_STDIO_WRAPPER;
     process.env.T3_MCP_STDIO_WRAPPER = wrapper;
     try {

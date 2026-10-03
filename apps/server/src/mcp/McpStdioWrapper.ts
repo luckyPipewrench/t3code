@@ -2,6 +2,8 @@
 // @effect-diagnostics nodeBuiltinImport:off
 import * as NodeFS from "node:fs";
 
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+
 import type { McpProviderSessionConfig } from "./McpProviderSession.ts";
 
 /**
@@ -50,7 +52,12 @@ export function isAbsoluteWrapperPath(value: string): boolean {
 
 function wrapperFileExists(path: string): boolean {
   try {
-    return NodeFS.statSync(path).isFile();
+    if (!NodeFS.statSync(path).isFile()) return false;
+    // Windows has no POSIX execute permission bit; process launch checks the
+    // executable format there. On POSIX, reject an unusable file up front.
+    if (HostProcessPlatform.defaultValue() !== "win32")
+      NodeFS.accessSync(path, NodeFS.constants.X_OK);
+    return true;
   } catch {
     return false;
   }
@@ -137,7 +144,7 @@ export function resolveT3McpTransport(
   }
   const exists = options.fileExists ?? wrapperFileExists;
   if (!exists(parsed.command)) {
-    fail(`the executable does not exist or is not a file (${parsed.command})`);
+    fail(`the executable does not exist, is not a file, or is not executable (${parsed.command})`);
   }
   return {
     kind: "stdio",

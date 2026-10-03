@@ -39,7 +39,7 @@ describe("pi T3 MCP injection", () => {
   it("refuses a configured stdio wrapper instead of connecting over HTTP", () => {
     const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-pi-wrapper-"));
     const binary = NodePath.join(directory, "wrapper");
-    NodeFS.writeFileSync(binary, "");
+    NodeFS.writeFileSync(binary, "", { mode: 0o700 });
     const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
     process.env[T3_MCP_STDIO_WRAPPER_ENV] = binary;
     try {

@@ -53,7 +53,7 @@ function withSession(wrapper: string | undefined, run: (threadId: ThreadId) => v
 describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
   const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-mcp-adapter-"));
   const binary = NodePath.join(directory, "wrapper");
-  NodeFS.writeFileSync(binary, "");
+  NodeFS.writeFileSync(binary, "", { mode: 0o700 });
   const session = { endpoint, authorizationHeader: token };
 
   it("keeps Claude, Codex, Cursor, OpenCode, and ACP on HTTP when unset", () => {
