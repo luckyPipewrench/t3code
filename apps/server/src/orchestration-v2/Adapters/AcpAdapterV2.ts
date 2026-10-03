@@ -734,6 +734,7 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
   };
 }
 
+/** MCP servers for an ACP session: the stdio wrapper when configured, otherwise T3's built-in bridge. */
 export function acpMcpServers(
   threadId: ThreadId | null,
   self: SelfInvocation,

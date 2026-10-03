@@ -1197,6 +1197,7 @@ export class CodexAppServerClientFactory extends Context.Service<
  */
 export const CODEX_THREAD_CONFIG = { "tools.update_plan.enabled": true } as const;
 
+/** Codex `mcp_servers` entry for t3-code: a stdio wrapper command, or the HTTP endpoint. */
 function codexT3McpServerConfig(
   session: Pick<McpProviderSession.McpProviderSessionConfig, "endpoint" | "authorizationHeader">,
 ): Schema.Json {

@@ -75,6 +75,7 @@ export function isAbsoluteWrapperPath(value: string): boolean {
   return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
 }
 
+/** Throws the categorized configuration error; the message never carries the raw value. */
 function fail(category: McpStdioWrapperConfigError["category"]): never {
   throw new McpStdioWrapperConfigError({ category });
 }
