@@ -1,3 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
@@ -13,8 +18,10 @@ import {
 import {
   buildPiRpcLaunch,
   materializePiT3McpExtension,
+  piT3McpStdioWrapperRefusal,
   resolvePiLaunchArgs,
 } from "./piT3McpInjection.ts";
+import { T3_MCP_STDIO_WRAPPER_ENV } from "../../mcp/McpStdioWrapper.ts";
 
 const threadId = ThreadId.make("thread-pi-t3-mcp");
 
@@ -29,6 +36,32 @@ const mcpSession = {
 };
 
 describe("pi T3 MCP injection", () => {
+  it("refuses a configured stdio wrapper instead of connecting over HTTP", () => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-pi-wrapper-"));
+    const binary = NodePath.join(directory, "wrapper");
+    NodeFS.writeFileSync(binary, "");
+    const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
+    process.env[T3_MCP_STDIO_WRAPPER_ENV] = binary;
+    try {
+      const refusal = piT3McpStdioWrapperRefusal(mcpSession);
+      assert.isTrue(refusal?.includes(T3_MCP_STDIO_WRAPPER_ENV));
+      assert.notInclude(refusal ?? "", "secret-pi-token");
+    } finally {
+      if (previous === undefined) delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
+      else process.env[T3_MCP_STDIO_WRAPPER_ENV] = previous;
+    }
+  });
+
+  it("keeps the HTTP extension when the wrapper is unset", () => {
+    const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
+    delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
+    try {
+      assert.isUndefined(piT3McpStdioWrapperRefusal(mcpSession));
+    } finally {
+      if (previous !== undefined) process.env[T3_MCP_STDIO_WRAPPER_ENV] = previous;
+    }
+  });
+
   it("always adds the permission bridge and configures MCP when available", () => {
     const resolvedArgs = resolvePiLaunchArgs(
       "--extension=/home/user/.pi/agent/extensions/demo.ts --session-dir=/tmp/pi-sessions --provider=anthropic --model=claude-sonnet --tools='' --name=-review --extension-flag=kept",

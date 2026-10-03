@@ -117,6 +117,7 @@ import { mergeProviderInstanceEnvironment } from "../../provider/ProviderInstanc
 import { T3_CODE_ORCHESTRATION_INSTRUCTIONS } from "../../provider/T3OrchestrationInstructions.ts";
 import { buildRuntimeInstructions } from "../../provider/RuntimeInstructions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { resolveT3McpTransport } from "../../mcp/McpStdioWrapper.ts";
 import * as IdAllocator from "../IdAllocator.ts";
 import { makeProviderFailure, makeProviderRetryTurnItem } from "../ProviderFailure.ts";
 import { turnScopedSelectionTransition } from "../ProviderSelectionTransition.ts";
@@ -971,20 +972,30 @@ export function claudeMcpQueryOverrides(input: {
   if (session === undefined) {
     return input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools };
   }
+  const transport = resolveT3McpTransport(session);
   const mcpAllowedTools = input.readOnlySandbox
     ? CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS
     : [CLAUDE_T3_MCP_TOOL_WILDCARD];
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
-      "t3-code": {
-        type: "http",
-        url: session.endpoint,
-        headers: {
-          Authorization: session.authorizationHeader,
-        },
-        timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
-      },
+      "t3-code":
+        transport.kind === "http"
+          ? {
+              type: "http",
+              url: session.endpoint,
+              headers: {
+                Authorization: session.authorizationHeader,
+              },
+              timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
+            }
+          : {
+              type: "stdio",
+              command: transport.command,
+              args: [...transport.args],
+              env: { ...transport.env },
+              timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
+            },
     },
   };
 }

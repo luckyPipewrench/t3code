@@ -63,6 +63,7 @@ import {
   type AcpMcpOverAcpBridge,
 } from "../../mcp/AcpMcpOverAcpBridge.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import { resolveT3McpTransport } from "../../mcp/McpStdioWrapper.ts";
 import {
   applyAcpAgentTerminalUpdate,
   acpContentBlockDisplayText,
@@ -684,12 +685,30 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
   if (session === undefined) {
     return { servers: [], acpServers: [] };
   }
+  const transport = resolveT3McpTransport(session);
   // Stdio is ACP's required baseline MCP transport. Agents that advertise
   // optional http support still routinely fail to wire injected http servers
   // through to their backend (codex-acp 1.2.0 and pi-acp both drop them), so
   // every ACP session gets the `t3 acp-mcp-bridge` stdio server, which
   // forwards JSON-RPC to T3's authenticated MCP endpoint. The credential
   // travels via environment variables, never the command line.
+  //
+  // An operator wrapper replaces that bridge. The in-process HTTP bridge and
+  // the terminal fallback both talk to the endpoint directly, so neither
+  // receives the credential while the wrapper is configured.
+  if (transport.kind === "stdio") {
+    return {
+      servers: [
+        {
+          name: "t3-code",
+          command: transport.command,
+          args: [...transport.args],
+          env: Object.entries(transport.env).map(([name, value]) => ({ name, value })),
+        },
+      ],
+      acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+    };
+  }
   return {
     servers: [
       {
@@ -715,7 +734,7 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
   };
 }
 
-function acpMcpServers(
+export function acpMcpServers(
   threadId: ThreadId | null,
   self: SelfInvocation,
 ): ReadonlyArray<EffectAcpSchema.McpServer> {
