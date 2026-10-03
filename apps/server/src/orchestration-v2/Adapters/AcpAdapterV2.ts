@@ -706,7 +706,9 @@ function acpMcpContext(threadId: ThreadId | null, self: SelfInvocation): AcpMcpC
           env: Object.entries(transport.env).map(([name, value]) => ({ name, value })),
         },
       ],
-      acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+      // No ACP-native descriptor: an agent that advertises ACP MCP would pick
+      // it over the wrapper, and its in-process bridge has no credential here.
+      acpServers: [],
     };
   }
   return {
@@ -742,7 +744,8 @@ export function acpMcpServers(
   return acpMcpContext(threadId, self).servers;
 }
 
-function acpMcpActivation(threadId: ThreadId | null, self: SelfInvocation) {
+/** MCP servers handed to an ACP session, in stdio and ACP-native form. */
+export function acpMcpActivation(threadId: ThreadId | null, self: SelfInvocation) {
   const context = acpMcpContext(threadId, self);
   return { mcpServers: context.servers, acpMcpServers: context.acpServers };
 }

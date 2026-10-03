@@ -6,7 +6,7 @@ import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 
-import { acpMcpServers } from "../orchestration-v2/Adapters/AcpAdapterV2.ts";
+import { acpMcpActivation, acpMcpServers } from "../orchestration-v2/Adapters/AcpAdapterV2.ts";
 import {
   CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
   claudeMcpQueryOverrides,
@@ -142,6 +142,13 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
         command: [binary, "--fixed"],
         environment: expectedEnv,
       });
+      // An ACP-native descriptor would win over the wrapper for agents that
+      // advertise ACP MCP, leaving them with no t3-code tools.
+      assert.deepEqual(
+        acpMcpActivation(threadId, { command: "/usr/bin/t3", entrypoint: "/usr/bin/t3" })
+          .acpMcpServers,
+        [],
+      );
       const acp = acpMcpServers(threadId, { command: "/usr/bin/t3", entrypoint: "/usr/bin/t3" });
       assert.deepEqual(acp as unknown, [
         {
