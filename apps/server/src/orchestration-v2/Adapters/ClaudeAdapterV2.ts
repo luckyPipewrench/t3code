@@ -1581,6 +1581,7 @@ export function claudeEffectiveQueryPolicyKey(
   mcpOverrides: {
     readonly allowedTools?: ReadonlyArray<string>;
     readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+    readonly mcpEnvironment?: Readonly<Record<string, string>>;
   },
 ): string {
   return JSON.stringify({
@@ -1591,6 +1592,16 @@ export function claudeEffectiveQueryPolicyKey(
         : { allowedTools: mcpOverrides.allowedTools }),
     }),
     mcpServers: mcpOverrides.mcpServers,
+    // With the stdio wrapper, mcpServers holds only ${VAR} references, so a
+    // rotated endpoint or token must still replace the live process. Hash the
+    // values so the key never carries the credential itself.
+    ...(mcpOverrides.mcpEnvironment === undefined
+      ? {}
+      : {
+          mcpEnvironment: NodeCrypto.createHash("sha256")
+            .update(JSON.stringify(Object.entries(mcpOverrides.mcpEnvironment).sort()))
+            .digest("hex"),
+        }),
   });
 }
 
@@ -6878,7 +6889,7 @@ export function makeClaudeAdapterV2(
           nativeThreadId: string,
         ) {
           const queryPolicy = claudeRuntimeQueryPolicyForRuntimePolicy(turnInput.runtimePolicy);
-          const { mcpEnvironment, ...mcpOverrides } = claudeMcpQueryOverrides({
+          const mcpQuery = claudeMcpQueryOverrides({
             threadId: turnInput.threadId,
             readOnlySandbox:
               sandboxPolicyKindForClaudeRuntimePolicy(turnInput.runtimePolicy) === "readOnly",
@@ -6886,7 +6897,8 @@ export function makeClaudeAdapterV2(
               ? {}
               : { allowedTools: queryPolicy.allowedTools }),
           });
-          const queryPolicyKey = claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides);
+          const { mcpEnvironment, ...mcpOverrides } = mcpQuery;
+          const queryPolicyKey = claudeEffectiveQueryPolicyKey(queryPolicy, mcpQuery);
           const compiledSelection = compileClaudeModelSelection(turnInput.modelSelection);
           const resumeSessionAt = yield* getNativeConversationHeadId(turnInput.providerThread);
           const existing = yield* Ref.get(queryContext);

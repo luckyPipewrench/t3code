@@ -70,6 +70,13 @@ Pi has no stdio MCP client and refuses to start a session that would have
 received `t3-code` while the variable is set. An external OpenCode server
 cannot launch a program on the T3 machine, so it refuses as well.
 
+The setting is read from the server environment, so changing it takes a
+server restart. It routes provider traffic through the wrapper; it is not an
+isolation boundary. The provider process still holds the endpoint and
+credential in its environment, so an agent running as the same OS user can
+reach the endpoint directly. Keeping an agent from bypassing the wrapper
+needs process or user separation outside T3.
+
 ## Provider Injection
 
 ### Codex V2
