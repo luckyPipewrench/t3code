@@ -40,26 +40,16 @@ describe("pi T3 MCP injection", () => {
     const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-pi-wrapper-"));
     const binary = NodePath.join(directory, "wrapper");
     NodeFS.writeFileSync(binary, "", { mode: 0o700 });
-    const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
-    process.env[T3_MCP_STDIO_WRAPPER_ENV] = binary;
-    try {
-      const refusal = piT3McpStdioWrapperRefusal(mcpSession);
-      assert.isTrue(refusal?.includes(T3_MCP_STDIO_WRAPPER_ENV));
-      assert.notInclude(refusal ?? "", "secret-pi-token");
-    } finally {
-      if (previous === undefined) delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
-      else process.env[T3_MCP_STDIO_WRAPPER_ENV] = previous;
-    }
+    const refusal = piT3McpStdioWrapperRefusal({
+      ...mcpSession,
+      stdioWrapper: { command: binary, args: [] },
+    });
+    assert.isTrue(refusal?.includes(T3_MCP_STDIO_WRAPPER_ENV));
+    assert.notInclude(refusal ?? "", "secret-pi-token");
   });
 
   it("keeps the HTTP extension when the wrapper is unset", () => {
-    const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
-    delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
-    try {
-      assert.isUndefined(piT3McpStdioWrapperRefusal(mcpSession));
-    } finally {
-      if (previous !== undefined) process.env[T3_MCP_STDIO_WRAPPER_ENV] = previous;
-    }
+    assert.isUndefined(piT3McpStdioWrapperRefusal(mcpSession));
   });
 
   it("always adds the permission bridge and configures MCP when available", () => {

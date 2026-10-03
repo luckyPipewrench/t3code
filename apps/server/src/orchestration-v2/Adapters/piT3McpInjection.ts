@@ -250,7 +250,9 @@ export const materializePiT3McpExtension = Effect.fn("materializePiT3McpExtensio
 
 /** Pi's extension speaks HTTP. A configured stdio wrapper must not fall through to that. */
 export function piT3McpStdioWrapperRefusal(
-  session: Pick<McpProviderSessionConfig, "endpoint" | "authorizationHeader"> | undefined,
+  session:
+    | Pick<McpProviderSessionConfig, "endpoint" | "authorizationHeader" | "stdioWrapper">
+    | undefined,
 ): string | undefined {
   if (session === undefined || resolveT3McpTransport(session).kind !== "stdio") {
     return undefined;

@@ -5,11 +5,14 @@ import * as NodePath from "node:path";
 
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
+import * as Effect from "effect/Effect";
+
 import { assert, describe, it } from "@effect/vitest";
 
 import {
   isAbsoluteWrapperPath,
   McpStdioWrapperConfigError,
+  loadMcpStdioWrapper,
   parseMcpStdioWrapperCommand,
   resolveT3McpTransport,
   T3_MCP_AUTHORIZATION_ENV,
@@ -28,7 +31,7 @@ describe("resolveT3McpTransport", () => {
   NodeFS.writeFileSync(binary, "", { mode: 0o700 });
 
   it("leaves the HTTP transport unchanged when the setting is unset", () => {
-    assert.deepEqual(resolveT3McpTransport(session, { environment: {} }), {
+    assert.deepEqual(resolveT3McpTransport(session), {
       kind: "http",
       endpoint: session.endpoint,
       authorizationHeader: session.authorizationHeader,
@@ -36,10 +39,9 @@ describe("resolveT3McpTransport", () => {
   });
 
   it("launches a stdio wrapper with the credential only in the environment", () => {
-    const transport = resolveT3McpTransport(session, {
-      environment: {
-        [T3_MCP_STDIO_WRAPPER_ENV]: `${binary} --listen stdio`,
-      },
+    const transport = resolveT3McpTransport({
+      ...session,
+      stdioWrapper: { command: binary, args: ["--listen", "stdio"] },
     });
     assert.deepEqual(transport, {
       kind: "stdio",
@@ -63,50 +65,69 @@ describe("resolveT3McpTransport", () => {
     );
   });
 
-  it.each([
-    ["relative path", `${NodePath.relative(process.cwd(), binary)} --listen stdio`],
-    ["dot relative path", `./${NodePath.relative(process.cwd(), binary)}`],
-    ["missing file", NodePath.join(executable, "missing")],
-    ["unmatched quote", `${binary} "unterminated`],
-    ["empty value", "   "],
-  ] as const)("refuses a %s", (_label, value) => {
-    try {
-      resolveT3McpTransport(session, {
-        environment: { [T3_MCP_STDIO_WRAPPER_ENV]: value },
-      });
-      assert.fail("expected the wrapper setting to be refused");
-    } catch (error) {
-      assert.instanceOf(error, McpStdioWrapperConfigError);
-      assert.include(error.message, T3_MCP_STDIO_WRAPPER_ENV);
-      assert.notInclude(error.message, "fixture-session-token");
-    }
-  });
+  const load = (value: string | undefined) =>
+    loadMcpStdioWrapper(value === undefined ? {} : { [T3_MCP_STDIO_WRAPPER_ENV]: value });
 
-  it.skipIf(HostProcessPlatform.defaultValue() === "win32")(
-    "refuses a file without execute permission",
-    () => {
-      const path = NodePath.join(executable, "not-executable");
-      NodeFS.writeFileSync(path, "#!/bin/sh\n", { mode: 0o600 });
-      assert.throws(
-        () =>
-          resolveT3McpTransport(session, {
-            environment: { [T3_MCP_STDIO_WRAPPER_ENV]: path },
+  it.effect("loads the startup snapshot and ignores later environment or file changes", () =>
+    Effect.gen(function* () {
+      assert.isUndefined(yield* load(undefined));
+      const stdioWrapper = yield* load(`${binary} --fixed`);
+      assert.deepEqual(stdioWrapper, { command: binary, args: ["--fixed"] });
+      const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
+      process.env[T3_MCP_STDIO_WRAPPER_ENV] = "invalid-relative-path";
+      try {
+        assert.doesNotThrow(() => resolveT3McpTransport(session));
+        assert.doesNotThrow(() => resolveT3McpTransport({ ...session, stdioWrapper }));
+        assert.doesNotThrow(() =>
+          resolveT3McpTransport({
+            ...session,
+            stdioWrapper: { command: "/removed-after-startup", args: [] },
           }),
-        McpStdioWrapperConfigError,
-      );
-    },
+        );
+      } finally {
+        if (previous === undefined) delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
+        else process.env[T3_MCP_STDIO_WRAPPER_ENV] = previous;
+      }
+    }),
   );
 
-  it("treats a directory as a missing executable", () => {
-    try {
-      resolveT3McpTransport(session, {
-        environment: { [T3_MCP_STDIO_WRAPPER_ENV]: executable },
-      });
-      assert.fail("expected a directory to be refused");
-    } catch (error) {
-      assert.instanceOf(error, McpStdioWrapperConfigError);
-    }
-  });
+  it.effect.each([
+    ["relativePath", "private-operator/wrapper"],
+    ["relativePath", "./private-operator/wrapper"],
+    ["notFound", NodePath.join(executable, "private-missing")],
+    ["unmatchedQuote", `${binary} "unterminated`],
+    ["emptyCommand", "   "],
+    ["emptyCommand", "''"],
+    ["notExecutable", executable],
+  ] as const)("startup rejects %s: %s", ([category, value]) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(load(value));
+      assert.isTrue(result._tag === "Failure");
+      if (result._tag !== "Failure") return;
+      assert.instanceOf(result.failure, McpStdioWrapperConfigError);
+      const error = result.failure as McpStdioWrapperConfigError;
+      assert.equal(error.category, category);
+      assert.include(error.message, T3_MCP_STDIO_WRAPPER_ENV);
+      assert.notInclude(error.message, value.trim() || "private-operator");
+      assert.notInclude(error.message, binary);
+      if (category === "notFound") assert.isDefined(error.cause);
+    }),
+  );
+
+  it.effect("startup rejects non-executable files without exposing the path", () =>
+    Effect.gen(function* () {
+      if (HostProcessPlatform.defaultValue() === "win32") return;
+      const path = NodePath.join(executable, "private-not-executable");
+      NodeFS.writeFileSync(path, "#!/bin/sh\n", { mode: 0o600 });
+      const result = yield* Effect.result(load(path));
+      assert.isTrue(result._tag === "Failure");
+      if (result._tag !== "Failure") return;
+      const error = result.failure as McpStdioWrapperConfigError;
+      assert.equal(error.category, "notExecutable");
+      assert.notInclude(error.message, path);
+      assert.isDefined(error.cause);
+    }),
+  );
 });
 
 describe("parseMcpStdioWrapperCommand", () => {

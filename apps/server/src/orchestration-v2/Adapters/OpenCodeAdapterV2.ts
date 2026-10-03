@@ -979,9 +979,7 @@ export function makeOpenCodeAdapterV2(
           return yield* new ProviderAdapter.ProviderAdapterOpenSessionError({
             driver: OPENCODE_PROVIDER,
             providerSessionId: input.providerSessionId,
-            cause: new McpStdioWrapperConfigError(
-              "An external OpenCode server cannot launch T3_MCP_STDIO_WRAPPER. Connect to a local OpenCode server or unset T3_MCP_STDIO_WRAPPER.",
-            ),
+            cause: new McpStdioWrapperConfigError({ category: "externalServer" }),
           });
         }
         const hasT3Mcp = transport !== undefined && !connection.external;

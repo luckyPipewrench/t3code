@@ -17,7 +17,7 @@ import { clearMcpProviderSession, setMcpProviderSession } from "./McpProviderSes
 import {
   openCodeT3McpConfig,
   T3_MCP_AUTHORIZATION_ENV,
-  T3_MCP_STDIO_WRAPPER_ENV,
+  parseMcpStdioWrapperCommand,
   T3_MCP_URL_ENV,
 } from "./McpStdioWrapper.ts";
 
@@ -35,18 +35,14 @@ function withSession(wrapper: string | undefined, run: (threadId: ThreadId) => v
     providerSessionId: "mcp-session-wrapper",
     providerInstanceId: ProviderInstanceId.make("codex"),
     endpoint,
+    stdioWrapper: wrapper === undefined ? undefined : parseMcpStdioWrapperCommand(wrapper),
     authorizationHeader: token,
     browserToolsAvailable: true,
   });
-  const previous = process.env[T3_MCP_STDIO_WRAPPER_ENV];
-  if (wrapper === undefined) delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
-  else process.env[T3_MCP_STDIO_WRAPPER_ENV] = wrapper;
   try {
     run(threadId);
   } finally {
     clearMcpProviderSession(threadId);
-    if (previous === undefined) delete process.env[T3_MCP_STDIO_WRAPPER_ENV];
-    else process.env[T3_MCP_STDIO_WRAPPER_ENV] = previous;
   }
 }
 
@@ -134,7 +130,10 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
       assert.deepEqual(cursorMcpServers(threadId), {
         "t3-code": { type: "stdio", command: binary, args: ["--fixed"], env: expectedEnv },
       });
-      const openCode = openCodeT3McpConfig(session);
+      const openCode = openCodeT3McpConfig({
+        ...session,
+        stdioWrapper: { command: binary, args: ["--fixed"] },
+      });
       if (openCode.type !== "local") {
         assert.fail("OpenCode must launch the wrapper as a local MCP server");
       }

@@ -64,13 +64,13 @@ in `T3_MCP_URL` and `T3_MCP_AUTHORIZATION`. They are not placed on the command
 line. Arguments are split on whitespace, with quotes grouping one argument, and
 are not interpreted by a shell.
 
-A relative path, a missing file, or a value that cannot be split refuses the
-provider session. Leaving the variable unset keeps the HTTP injection below.
+A relative path, a missing or non-executable file, or a value that cannot be
+split refuses server startup. Leaving the variable unset keeps the HTTP injection below.
 Pi has no stdio MCP client and refuses to start a session that would have
 received `t3-code` while the variable is set. An external OpenCode server
 cannot launch a program on the T3 machine, so it refuses as well.
 
-The setting is read from the server environment, so changing it takes a
+The setting is validated once at startup, so changing it takes a
 server restart. It routes provider traffic through the wrapper; it is not an
 isolation boundary. The provider process still holds the endpoint and
 credential in its environment, so an agent running as the same OS user can

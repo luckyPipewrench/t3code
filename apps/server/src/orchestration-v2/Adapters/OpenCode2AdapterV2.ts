@@ -3237,11 +3237,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       const name = t3McpServerName(turnInput.threadId);
       const transport = mcpSession === undefined ? undefined : resolveT3McpTransport(mcpSession);
       if (transport?.kind === "stdio" && connection.external) {
-        return yield* Effect.fail(
-          new McpStdioWrapperConfigError(
-            "An external OpenCode server cannot launch T3_MCP_STDIO_WRAPPER. Connect to a local OpenCode server or unset T3_MCP_STDIO_WRAPPER.",
-          ),
-        );
+        return yield* Effect.fail(new McpStdioWrapperConfigError({ category: "externalServer" }));
       }
       // An external server may not reach T3's MCP endpoint, as with 1.x.
       const wanted =

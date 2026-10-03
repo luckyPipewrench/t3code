@@ -480,13 +480,18 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     },
   } as const;
 
-  const withMcpSession = (threadId: ThreadId, run: () => void) => {
+  const withMcpSession = (
+    threadId: ThreadId,
+    run: () => void,
+    stdioWrapper?: { command: string; args: ReadonlyArray<string> },
+  ) => {
     McpProviderSession.setMcpProviderSession({
       environmentId: EnvironmentId.make(`environment-${threadId}`),
       threadId,
       providerSessionId: `mcp-session-${threadId}`,
       providerInstanceId: ProviderInstanceId.make("claudeAgent"),
       endpoint: "http://127.0.0.1:43123/mcp",
+      stdioWrapper,
       authorizationHeader: "Bearer secret-claude-token",
       browserToolsAvailable: true,
     });
@@ -654,40 +659,45 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     const previous = process.env.T3_MCP_STDIO_WRAPPER;
     process.env.T3_MCP_STDIO_WRAPPER = wrapper;
     try {
-      withMcpSession(threadId, () => {
-        const queryPolicy = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(
-          ProviderAdapterV2RuntimePolicy.make({
-            runtimeMode: "approval-required",
-            interactionMode: "default",
-            cwd: "/workspace",
-          }),
-        );
-        const initial = ClaudeAdapterV2.claudeMcpQueryOverrides({
-          threadId,
-          readOnlySandbox: false,
-        });
-        const initialKey = ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, initial);
+      withMcpSession(
+        threadId,
+        () => {
+          const queryPolicy = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(
+            ProviderAdapterV2RuntimePolicy.make({
+              runtimeMode: "approval-required",
+              interactionMode: "default",
+              cwd: "/workspace",
+            }),
+          );
+          const initial = ClaudeAdapterV2.claudeMcpQueryOverrides({
+            threadId,
+            readOnlySandbox: false,
+          });
+          const initialKey = ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, initial);
 
-        McpProviderSession.setMcpProviderSession({
-          environmentId: EnvironmentId.make(`environment-${threadId}`),
-          threadId,
-          providerSessionId: `mcp-session-${threadId}`,
-          providerInstanceId: ProviderInstanceId.make("claudeAgent"),
-          endpoint: "http://127.0.0.1:43123/mcp",
-          authorizationHeader: "Bearer rotated-wrapper-token",
-          browserToolsAvailable: true,
-        });
+          McpProviderSession.setMcpProviderSession({
+            environmentId: EnvironmentId.make(`environment-${threadId}`),
+            threadId,
+            providerSessionId: `mcp-session-${threadId}`,
+            providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+            endpoint: "http://127.0.0.1:43123/mcp",
+            stdioWrapper: { command: wrapper, args: [] },
+            authorizationHeader: "Bearer rotated-wrapper-token",
+            browserToolsAvailable: true,
+          });
 
-        const rotated = ClaudeAdapterV2.claudeMcpQueryOverrides({
-          threadId,
-          readOnlySandbox: false,
-        });
-        // The serialized config is identical: it only names the variables.
-        assert.deepEqual(rotated.mcpServers, initial.mcpServers);
-        const rotatedKey = ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, rotated);
-        assert.notEqual(rotatedKey, initialKey);
-        assert.isFalse(rotatedKey.includes("rotated-wrapper-token"));
-      });
+          const rotated = ClaudeAdapterV2.claudeMcpQueryOverrides({
+            threadId,
+            readOnlySandbox: false,
+          });
+          // The serialized config is identical: it only names the variables.
+          assert.deepEqual(rotated.mcpServers, initial.mcpServers);
+          const rotatedKey = ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, rotated);
+          assert.notEqual(rotatedKey, initialKey);
+          assert.isFalse(rotatedKey.includes("rotated-wrapper-token"));
+        },
+        { command: wrapper, args: [] },
+      );
     } finally {
       if (previous === undefined) delete process.env.T3_MCP_STDIO_WRAPPER;
       else process.env.T3_MCP_STDIO_WRAPPER = previous;
