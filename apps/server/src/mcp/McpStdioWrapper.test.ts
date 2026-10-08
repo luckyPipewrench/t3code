@@ -18,7 +18,7 @@ import {
   T3_MCP_AUTHORIZATION_ENV,
   T3_MCP_STDIO_WRAPPER_ENV,
   T3_MCP_URL_ENV,
-} from "./McpStdioWrapper.ts";
+} from "@t3tools/provider-core/server/mcpStdioWrapper";
 
 const session = {
   endpoint: "http://127.0.0.1:43123/mcp",

@@ -20,7 +20,7 @@ import * as NetService from "@t3tools/shared/Net";
 import { DEFAULT_SIGNAL_EXPORT } from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as McpStdioWrapper from "../mcp/McpStdioWrapper.ts";
+import * as McpStdioWrapper from "@t3tools/provider-core/server/mcpStdioWrapper";
 import { deriveServerPaths } from "../config.ts";
 import { resolveServerConfig } from "./config.ts";
 

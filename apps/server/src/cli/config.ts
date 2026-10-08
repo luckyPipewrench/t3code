@@ -21,7 +21,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { Argument, Flag } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
-import * as McpStdioWrapper from "../mcp/McpStdioWrapper.ts";
+import * as McpStdioWrapper from "@t3tools/provider-core/server/mcpStdioWrapper";
 import { readBootstrapEnvelope } from "../bootstrap.ts";
 import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";

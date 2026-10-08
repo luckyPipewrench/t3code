@@ -16,7 +16,7 @@ import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
-import type { McpStdioWrapperCommand } from "./mcp/McpStdioWrapper.ts";
+import type { McpStdioWrapperCommand } from "@t3tools/provider-core/server/mcpStdioWrapper";
 import { sweepStalePendingAttachments } from "./attachmentStore.ts";
 import { DEFAULT_SIGNAL_EXPORT, type SignalExport } from "@t3tools/shared/observability";
 import * as OtelEnvironment from "@t3tools/shared/otelEnvironment";
