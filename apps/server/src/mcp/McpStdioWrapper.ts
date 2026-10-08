@@ -75,11 +75,6 @@ export function isAbsoluteWrapperPath(value: string): boolean {
   return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
 }
 
-/** Throws the categorized configuration error; the message never carries the raw value. */
-function fail(category: McpStdioWrapperConfigError["category"]): never {
-  throw new McpStdioWrapperConfigError({ category });
-}
-
 /**
  * Splits a wrapper command into argv. Unmatched quotes and an empty command
  * are configuration errors. Backslashes are literal characters.
@@ -119,14 +114,14 @@ export function parseMcpStdioWrapperCommand(value: string): {
     sawToken = true;
   }
   if (quote !== null) {
-    fail("unmatchedQuote");
+    throw new McpStdioWrapperConfigError({ category: "unmatchedQuote" });
   }
   if (current.length > 0 || sawToken) {
     tokens.push(current);
   }
   const command = tokens[0];
   if (command === undefined || command.length === 0) {
-    fail("emptyCommand");
+    throw new McpStdioWrapperConfigError({ category: "emptyCommand" });
   }
   return { command, args: tokens.slice(1) };
 }
@@ -141,14 +136,15 @@ export const loadMcpStdioWrapper = (environment: NodeJS.ProcessEnv = process.env
     return yield* Effect.try({
       try: () => {
         const parsed = parseMcpStdioWrapperCommand(configured);
-        if (!isAbsoluteWrapperPath(parsed.command)) fail("relativePath");
+        if (!isAbsoluteWrapperPath(parsed.command))
+          throw new McpStdioWrapperConfigError({ category: "relativePath" });
         let stat: NodeFS.Stats;
         try {
           stat = NodeFS.statSync(parsed.command);
         } catch (cause) {
           throw new McpStdioWrapperConfigError({ category: "notFound", cause });
         }
-        if (!stat.isFile()) fail("notExecutable");
+        if (!stat.isFile()) throw new McpStdioWrapperConfigError({ category: "notExecutable" });
         if (HostProcessPlatform.defaultValue() !== "win32") {
           try {
             NodeFS.accessSync(parsed.command, NodeFS.constants.X_OK);
