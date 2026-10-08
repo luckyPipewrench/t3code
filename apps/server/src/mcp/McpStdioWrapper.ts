@@ -133,6 +133,7 @@ export const loadMcpStdioWrapper = (environment: NodeJS.ProcessEnv = process.env
       .pipe(Config.option, Config.map(Option.getOrUndefined))
       .parse(ConfigProvider.fromEnvRecord(environment, { preserveEmptyStrings: true }));
     if (configured === undefined) return undefined;
+    const platform = yield* HostProcessPlatform;
     return yield* Effect.try({
       try: () => {
         const parsed = parseMcpStdioWrapperCommand(configured);
@@ -145,7 +146,7 @@ export const loadMcpStdioWrapper = (environment: NodeJS.ProcessEnv = process.env
           throw new McpStdioWrapperConfigError({ category: "notFound", cause });
         }
         if (!stat.isFile()) throw new McpStdioWrapperConfigError({ category: "notExecutable" });
-        if (HostProcessPlatform.defaultValue() !== "win32") {
+        if (platform !== "win32") {
           try {
             NodeFS.accessSync(parsed.command, NodeFS.constants.X_OK);
           } catch (cause) {

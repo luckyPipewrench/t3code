@@ -114,6 +114,25 @@ describe("resolveT3McpTransport", () => {
     }),
   );
 
+  it.effect("uses the provided platform for executable permission validation", () =>
+    Effect.gen(function* () {
+      if ((yield* HostProcessPlatform) === "win32") return;
+      const path = NodePath.join(executable, "platform-override-wrapper");
+      NodeFS.writeFileSync(path, "", { mode: 0o600 });
+      const windows = yield* load(path).pipe(Effect.provideService(HostProcessPlatform, "win32"));
+      assert.deepEqual(windows, { command: path, args: [] });
+      const linux = yield* load(path).pipe(
+        Effect.provideService(HostProcessPlatform, "linux"),
+        Effect.result,
+      );
+      assert.equal(linux._tag, "Failure");
+      if (linux._tag === "Failure") {
+        assert.instanceOf(linux.failure, McpStdioWrapperConfigError);
+        assert.propertyVal(linux.failure, "category", "notExecutable");
+      }
+    }),
+  );
+
   it.effect("startup rejects non-executable files without exposing the path", () =>
     Effect.gen(function* () {
       if (HostProcessPlatform.defaultValue() === "win32") return;
