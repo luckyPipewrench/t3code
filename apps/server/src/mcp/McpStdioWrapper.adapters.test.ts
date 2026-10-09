@@ -6,13 +6,13 @@ import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 
-import { acpMcpActivation, acpMcpServers } from "../orchestration-v2/Adapters/AcpAdapterV2.ts";
+import { acpMcpActivation, acpMcpServers } from "@t3tools/provider-acp/server/adapter";
 import {
   CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
   claudeMcpQueryOverrides,
 } from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
 import { codexThreadRuntimeParams } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
-import { cursorMcpServers } from "../orchestration-v2/Adapters/CursorAdapterV2.ts";
+import { cursorMcpServers } from "@t3tools/provider-cursor/testing";
 import {
   clearMcpProviderSession,
   setMcpProviderSession,
