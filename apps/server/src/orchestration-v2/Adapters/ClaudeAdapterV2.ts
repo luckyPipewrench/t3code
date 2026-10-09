@@ -969,6 +969,13 @@ export const CLAUDE_T3_MCP_TOOL_TIMEOUT_MS = 65 * 60 * 1_000;
 // not pre-approved), but read-only sandboxes pre-approve only the annotated
 // read-only orchestrator tools so a read-only session cannot silently spawn
 // threads or scheduled tasks.
+//
+// The SDK passes `mcpServers` to the CLI as an inline `--mcp-config` argument,
+// and process arguments are readable by every local user. The credential
+// therefore travels in the child's environment, which only its owner can read,
+// and the CLI expands the `${VAR}` reference when it connects.
+const CLAUDE_T3_MCP_AUTHORIZATION_ENV = "T3_CODE_MCP_AUTHORIZATION";
+
 export function claudeMcpQueryOverrides(input: {
   readonly threadId: ThreadId;
   readonly readOnlySandbox: boolean;
@@ -976,7 +983,7 @@ export function claudeMcpQueryOverrides(input: {
 }): {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
-  /** Values the stdio wrapper's ${VAR} references resolve from in the CLI environment. */
+  /** Values the MCP config's ${VAR} references resolve from in the CLI environment. */
   readonly mcpEnvironment?: Readonly<Record<string, string>>;
 } {
   const session = McpProviderSession.readMcpProviderSession(input.threadId);
@@ -996,7 +1003,7 @@ export function claudeMcpQueryOverrides(input: {
               type: "http",
               url: session.endpoint,
               headers: {
-                Authorization: session.authorizationHeader,
+                Authorization: `\${${CLAUDE_T3_MCP_AUTHORIZATION_ENV}}`,
               },
               timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
             }
@@ -1014,7 +1021,10 @@ export function claudeMcpQueryOverrides(input: {
               timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
             },
     },
-    ...(transport.kind === "stdio" ? { mcpEnvironment: { ...transport.env } } : {}),
+    mcpEnvironment:
+      transport.kind === "stdio"
+        ? { ...transport.env }
+        : { [CLAUDE_T3_MCP_AUTHORIZATION_ENV]: session.authorizationHeader },
   };
 }
 
@@ -1656,7 +1666,7 @@ export function claudeEffectiveQueryPolicyKey(
         : { allowedTools: mcpOverrides.allowedTools }),
     }),
     mcpServers: mcpOverrides.mcpServers,
-    // With the stdio wrapper, mcpServers holds only ${VAR} references, so a
+    // mcpServers holds only ${VAR} references, so a
     // rotated endpoint or token must still replace the live process. Hash the
     // values so the key never carries the credential itself.
     ...(mcpOverrides.mcpEnvironment === undefined
@@ -7376,12 +7386,14 @@ export function makeClaudeAdapterV2(
             cwd: turnInput.runtimePolicy.cwd,
             attachmentsDir,
             settings: adapterOptions.settings,
-            environment:
-              mcpEnvironment === undefined
-                ? adapterOptions.environment
-                : { ...(adapterOptions.environment ?? process.env), ...mcpEnvironment },
+            environment: { ...adapterOptions.environment, ...mcpEnvironment },
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
-            ...mcpOverrides,
+            ...(mcpOverrides.allowedTools === undefined
+              ? {}
+              : { allowedTools: mcpOverrides.allowedTools }),
+            ...(mcpOverrides.mcpServers === undefined
+              ? {}
+              : { mcpServers: mcpOverrides.mcpServers }),
             permissionMode: queryPolicy.permissionMode,
             ...(queryPolicy.allowDangerouslySkipPermissions === undefined
               ? {}

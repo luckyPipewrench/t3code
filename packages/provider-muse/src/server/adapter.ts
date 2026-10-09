@@ -35,7 +35,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 
-import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { T3_MCP_STDIO_WRAPPER_ENV } from "@t3tools/provider-core/server/mcpStdioWrapper";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
@@ -182,9 +182,6 @@ export interface MuseAdapterV2Options {
   readonly instanceId: ProviderInstanceId;
   readonly settings: MuseSettings;
   readonly environment: NodeJS.ProcessEnv;
-  readonly idAllocator: IdAllocator.IdAllocatorV2["Service"];
-  readonly host: ProviderHost.ProviderHostShape;
-  readonly fileSystem: FileSystem.FileSystem;
   readonly modelCatalog?: Effect.Effect<ReadonlyArray<ServerProviderModel>>;
   readonly createHost?: typeof createMuseSdkHost;
   readonly requestTimeoutMs?: number;
@@ -246,10 +243,13 @@ const TOOLS_WITH_NATIVE_ROWS = new Set(["write_todos", "request_user_input", "wo
 const responseAnswerSchema = Schema.Union([Schema.String, Schema.Array(Schema.String)]);
 
 /** One scoped Muse host owns one native session; the orchestrator owns app runs and queuing. */
-export function makeMuseAdapterV2(
+export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
   options: MuseAdapterV2Options,
-): ProviderAdapter.ProviderAdapterV2Shape {
-  const { idAllocator } = options;
+) {
+  const idAllocator = yield* IdAllocator.IdAllocatorV2;
+  const providerHost = yield* ProviderHost.ProviderHost;
+  const fileSystem = yield* FileSystem.FileSystem;
+
   const protocolError = (detail: string, payload?: unknown) =>
     new ProviderAdapter.ProviderAdapterProtocolError({
       driver: MUSE_PROVIDER,
@@ -270,8 +270,8 @@ export function makeMuseAdapterV2(
       const scope = yield* Effect.scope;
       // Muse rejects non-canonical workspace roots (for example macOS /tmp) and
       // reports canonical paths in approvals, so resolve symlinks once here.
-      const requestedCwd = input.runtimePolicy.cwd ?? options.host.paths.cwd;
-      const cwd = yield* options.fileSystem
+      const requestedCwd = input.runtimePolicy.cwd ?? providerHost.paths.cwd;
+      const cwd = yield* fileSystem
         .realPath(requestedCwd)
         .pipe(Effect.orElseSucceed(() => requestedCwd));
       const now = yield* DateTime.now;
@@ -1586,14 +1586,14 @@ export function makeMuseAdapterV2(
         const text = providerMessageTextWithAttachmentPaths({
           text: message.text,
           attachments: message.attachments,
-          resolveAttachmentPath: options.host.resolveAttachmentPath,
+          resolveAttachmentPath: providerHost.resolveAttachmentPath,
         });
         if (text) parts.push({ type: "text", text });
         for (const attachment of message.attachments)
           if (isProviderNativeImageAttachment(attachment)) {
-            const path = options.host.resolveAttachmentPath(attachment);
+            const path = providerHost.resolveAttachmentPath(attachment);
             if (!path) return yield* protocolError("Muse image attachment is missing");
-            const bytes = yield* options.fileSystem
+            const bytes = yield* fileSystem
               .readFile(path)
               .pipe(Effect.mapError((cause) => protocolError("Cannot read Muse image", cause)));
             parts.push({
@@ -2036,4 +2036,4 @@ export function makeMuseAdapterV2(
       return runtime;
     }),
   });
-}
+});

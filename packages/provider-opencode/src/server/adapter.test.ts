@@ -36,7 +36,7 @@ import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { layerTestProviderHost } from "@t3tools/provider-testing/host";
 import type * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import type * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
+import * as OpenCodeRuntime from "./OpenCodeRuntime.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 
 import {
@@ -150,7 +150,6 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
   nativeSessionId: string,
   client: object,
 ) {
-  const idAllocator = yield* IdAllocator.IdAllocatorV2;
   const instanceId = ProviderInstanceId.make(`opencode-${suffix}`);
   const threadId = ThreadId.make(`thread-opencode-${suffix}`);
   const modelSelection = {
@@ -159,20 +158,20 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
     options: [],
   };
   const policy = runtimePolicy("full-access", { cwd: "/workspace" });
-  const adapter = makeOpenCodeAdapterV2({
+  const adapter = yield* makeOpenCodeAdapterV2({
     instanceId,
     settings: OPEN_CODE_TEST_SETTINGS,
     environment: {},
-    runtime: {
+  }).pipe(
+    Effect.provideService(OpenCodeRuntime.OpenCodeRuntime, {
       connectToOpenCodeServer: () => Effect.succeed({ url: "http://test.invalid", external: true }),
       createOpenCodeSdkClient: () => client,
-    } as unknown as OpenCodeRuntime.OpenCodeRuntimeShape,
-    idAllocator,
-    host: {
+    } as unknown as OpenCodeRuntime.OpenCodeRuntimeShape),
+    Effect.provideService(ProviderHost.ProviderHost, {
       paths: { cwd: "/workspace" },
       resolveAttachmentPath: () => null,
-    } as unknown as ProviderHost.ProviderHostShape,
-  });
+    } as unknown as ProviderHost.ProviderHost["Service"]),
+  );
   const runtime = yield* adapter.openSession({
     threadId,
     providerSessionId: ProviderSessionId.make(`session-opencode-${suffix}`),
@@ -1449,7 +1448,6 @@ describe("OpenCodeAdapterV2", () => {
 
   it.effect("keeps a newly admitted prompt alive across stale idle and delayed busy evidence", () =>
     Effect.gen(function* () {
-      const idAllocator = yield* IdAllocator.IdAllocatorV2;
       const nativeEvents = asyncEventStream();
       const prompt = promiseGate<void>();
       const promptStarted = promiseGate<void>();
@@ -1516,21 +1514,21 @@ describe("OpenCodeAdapterV2", () => {
         },
         mcp: { add: async () => ({ data: true }) },
       };
-      const adapter = makeOpenCodeAdapterV2({
+      const adapter = yield* makeOpenCodeAdapterV2({
         instanceId: ProviderInstanceId.make("opencode-test"),
         settings: OPEN_CODE_TEST_SETTINGS,
         environment: {},
-        runtime: {
+      }).pipe(
+        Effect.provideService(OpenCodeRuntime.OpenCodeRuntime, {
           connectToOpenCodeServer: () =>
             Effect.succeed({ url: "http://test.invalid", external: true }),
           createOpenCodeSdkClient: () => client,
-        } as unknown as OpenCodeRuntime.OpenCodeRuntimeShape,
-        idAllocator,
-        host: {
+        } as unknown as OpenCodeRuntime.OpenCodeRuntimeShape),
+        Effect.provideService(ProviderHost.ProviderHost, {
           paths: { cwd: "/workspace" },
           resolveAttachmentPath: () => null,
-        } as unknown as ProviderHost.ProviderHostShape,
-      });
+        } as unknown as ProviderHost.ProviderHost["Service"]),
+      );
       const threadId = ThreadId.make("thread-opencode-admission-race");
       const providerSessionId = ProviderSessionId.make("session-opencode-admission-race");
       const modelSelection = {
@@ -1767,7 +1765,6 @@ describe("OpenCodeAdapterV2", () => {
 
   it.effect("interrupts an initial prompt while its SDK request is pending", () =>
     Effect.gen(function* () {
-      const idAllocator = yield* IdAllocator.IdAllocatorV2;
       const nativeEvents = asyncEventStream();
       const promptStarted = promiseGate<void>();
       const abortCalled = promiseGate<void>();
@@ -1811,21 +1808,21 @@ describe("OpenCodeAdapterV2", () => {
         },
         mcp: { add: async () => ({ data: true }) },
       };
-      const adapter = makeOpenCodeAdapterV2({
+      const adapter = yield* makeOpenCodeAdapterV2({
         instanceId: ProviderInstanceId.make("opencode-initial-stop-test"),
         settings: OPEN_CODE_TEST_SETTINGS,
         environment: {},
-        runtime: {
+      }).pipe(
+        Effect.provideService(OpenCodeRuntime.OpenCodeRuntime, {
           connectToOpenCodeServer: () =>
             Effect.succeed({ url: "http://test.invalid", external: true }),
           createOpenCodeSdkClient: () => client,
-        } as unknown as OpenCodeRuntime.OpenCodeRuntimeShape,
-        idAllocator,
-        host: {
+        } as unknown as OpenCodeRuntime.OpenCodeRuntimeShape),
+        Effect.provideService(ProviderHost.ProviderHost, {
           paths: { cwd: "/workspace" },
           resolveAttachmentPath: () => null,
-        } as unknown as ProviderHost.ProviderHostShape,
-      });
+        } as unknown as ProviderHost.ProviderHost["Service"]),
+      );
       const threadId = ThreadId.make("thread-opencode-initial-stop");
       const providerSessionId = ProviderSessionId.make("session-opencode-initial-stop");
       const modelSelection = {
@@ -2447,8 +2444,6 @@ describe("OpenCodeAdapterV2", () => {
 
   it.effect("adopts the handed-over provider thread identity on session create", () =>
     Effect.gen(function* () {
-      const idAllocator = yield* IdAllocator.IdAllocatorV2;
-      const host = yield* ProviderHost.ProviderHost;
       let createCount = 0;
       const createInputs: Array<unknown> = [];
       const fakeClient = {
@@ -2495,14 +2490,11 @@ describe("OpenCodeAdapterV2", () => {
       const instanceId = ProviderInstanceId.make("opencode");
       const threadId = ThreadId.make("thread-opencode-adopt");
       const modelSelection = { instanceId, model: "default" };
-      const adapter = makeOpenCodeAdapterV2({
+      const adapter = yield* makeOpenCodeAdapterV2({
         instanceId,
         settings: OPENCODE_TEST_SETTINGS,
         environment: {},
-        runtime,
-        idAllocator,
-        host,
-      });
+      }).pipe(Effect.provideService(OpenCodeRuntime.OpenCodeRuntime, runtime));
       const session = yield* adapter.openSession({
         threadId,
         providerSessionId: ProviderSessionId.make("provider-session-opencode-adopt"),

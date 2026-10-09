@@ -58,12 +58,13 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
   it("keeps Claude, Codex, Cursor, OpenCode, and ACP on HTTP when unset", () => {
     withSession(undefined, (threadId) => {
       const claude = claudeMcpQueryOverrides({ threadId, readOnlySandbox: false });
-      assert.isUndefined(claude.mcpEnvironment);
+      assert.deepEqual(claude.mcpEnvironment, { T3_CODE_MCP_AUTHORIZATION: token });
+      assert.notInclude(JSON.stringify(claude.mcpServers), token);
       assert.deepEqual(claude.mcpServers, {
         "t3-code": {
           type: "http",
           url: endpoint,
-          headers: { Authorization: token },
+          headers: { Authorization: "${T3_CODE_MCP_AUTHORIZATION}" },
           timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
         },
       });
