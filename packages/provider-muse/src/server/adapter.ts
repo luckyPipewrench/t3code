@@ -38,6 +38,7 @@ import * as Stream from "effect/Stream";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { T3_MCP_STDIO_WRAPPER_ENV } from "@t3tools/provider-core/server/mcpStdioWrapper";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import { museModelCapabilities, resolveMuseReasoningEffort } from "./modelCatalog.ts";
 import {
@@ -75,7 +76,7 @@ import {
   backgroundWorkNotification,
   type BackgroundWorkReport,
 } from "@t3tools/provider-core/server/notification";
-import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/continuationRequests";
+import type * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import { turnScopedSelectionTransition } from "@t3tools/provider-core/server/selectionTransition";
 import { museItemStatus, museToolPresentation } from "./itemPresentation.ts";
@@ -249,6 +250,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
   const idAllocator = yield* IdAllocator.IdAllocatorV2;
   const providerHost = yield* ProviderHost.ProviderHost;
   const fileSystem = yield* FileSystem.FileSystem;
+  const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
 
   const protocolError = (detail: string, payload?: unknown) =>
     new ProviderAdapter.ProviderAdapterProtocolError({
@@ -1365,7 +1367,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
       );
       const launchHost = Effect.fnUntraced(function* () {
         const epoch = ++hostEpoch;
-        const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+        const mcpSession = yield* mcpSessions.read(input.threadId);
         const created = yield* Effect.acquireRelease(
           createMuseSdkHostEffect(
             {
@@ -1479,7 +1481,7 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
         let missingNativeSession = false;
         return yield* Effect.gen(function* () {
           nativeSessionId = requestedId ?? host.connection.mintCommandId();
-          const mcpSession = McpProviderSession.readMcpProviderSession(args.threadId);
+          const mcpSession = yield* mcpSessions.read(args.threadId);
           if (mcpSession?.stdioWrapper !== undefined)
             return yield* protocolError(
               `Muse uses HTTP for T3 MCP, so ${T3_MCP_STDIO_WRAPPER_ENV} cannot be applied. Unset ${T3_MCP_STDIO_WRAPPER_ENV} or use a provider that launches stdio MCP servers.`,

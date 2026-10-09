@@ -6,17 +6,18 @@ import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 
-import { acpMcpActivation, acpMcpServers } from "@t3tools/provider-acp/server/adapter";
+import {
+  acpMcpActivation,
+  acpMcpContext,
+  acpMcpServers,
+} from "@t3tools/provider-acp/server/adapter";
 import {
   CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
   claudeMcpQueryOverrides,
 } from "../orchestration-v2/Adapters/ClaudeAdapterV2.ts";
 import { codexThreadRuntimeParams } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
 import { cursorMcpServers } from "@t3tools/provider-cursor/testing";
-import {
-  clearMcpProviderSession,
-  setMcpProviderSession,
-} from "@t3tools/provider-core/server/mcpSession";
+import type { McpProviderSessionConfig } from "@t3tools/provider-core/server/mcpSession";
 import {
   openCodeT3McpConfig,
   T3_MCP_AUTHORIZATION_ENV,
@@ -29,10 +30,13 @@ const endpoint = "http://127.0.0.1:43123/mcp";
 
 let sessionCounter = 0;
 
-function withSession(wrapper: string | undefined, run: (threadId: ThreadId) => void): void {
+function withSession(
+  wrapper: string | undefined,
+  run: (mcpSession: McpProviderSessionConfig) => void,
+): void {
   sessionCounter += 1;
   const threadId = ThreadId.make(`thread-wrapper-${sessionCounter}`);
-  setMcpProviderSession({
+  const session: McpProviderSessionConfig = {
     environmentId: EnvironmentId.make("environment-wrapper"),
     threadId,
     providerSessionId: "mcp-session-wrapper",
@@ -41,12 +45,8 @@ function withSession(wrapper: string | undefined, run: (threadId: ThreadId) => v
     stdioWrapper: wrapper === undefined ? undefined : parseMcpStdioWrapperCommand(wrapper),
     authorizationHeader: token,
     browserToolsAvailable: true,
-  });
-  try {
-    run(threadId);
-  } finally {
-    clearMcpProviderSession(threadId);
-  }
+  };
+  run(session);
 }
 
 describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
@@ -56,8 +56,8 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
   const session = { endpoint, authorizationHeader: token };
 
   it("keeps Claude, Codex, Cursor, OpenCode, and ACP on HTTP when unset", () => {
-    withSession(undefined, (threadId) => {
-      const claude = claudeMcpQueryOverrides({ threadId, readOnlySandbox: false });
+    withSession(undefined, (mcpSession) => {
+      const claude = claudeMcpQueryOverrides({ mcpSession, readOnlySandbox: false });
       assert.deepEqual(claude.mcpEnvironment, { T3_CODE_MCP_AUTHORIZATION: token });
       assert.notInclude(JSON.stringify(claude.mcpServers), token);
       assert.deepEqual(claude.mcpServers, {
@@ -68,11 +68,11 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
           timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
         },
       });
-      const codex = codexThreadRuntimeParams({ threadId });
+      const codex = codexThreadRuntimeParams({ mcpSession });
       assert.deepEqual(codex.config.mcp_servers, {
         "t3-code": { url: endpoint, http_headers: { Authorization: token } },
       });
-      assert.deepEqual(cursorMcpServers(threadId), {
+      assert.deepEqual(cursorMcpServers(mcpSession), {
         "t3-code": { type: "http", url: endpoint, headers: { Authorization: token } },
       });
       assert.deepEqual(openCodeT3McpConfig(session), {
@@ -82,7 +82,7 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
         oauth: false,
       });
       assert.deepEqual(
-        acpMcpServers(threadId, { command: "/usr/bin/t3", entrypoint: undefined }) as unknown,
+        acpMcpServers(mcpSession, { command: "/usr/bin/t3", entrypoint: undefined }) as unknown,
         [
           {
             name: "t3-code",
@@ -100,12 +100,12 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
   });
 
   it("puts the credential in the wrapper environment for every stdio-capable adapter", () => {
-    withSession(`${binary} --fixed`, (threadId) => {
+    withSession(`${binary} --fixed`, (mcpSession) => {
       const expectedEnv = {
         [T3_MCP_URL_ENV]: endpoint,
         [T3_MCP_AUTHORIZATION_ENV]: token,
       };
-      const claude = claudeMcpQueryOverrides({ threadId, readOnlySandbox: false });
+      const claude = claudeMcpQueryOverrides({ mcpSession, readOnlySandbox: false });
       assert.deepEqual(claude.mcpServers?.["t3-code"], {
         type: "stdio",
         command: binary,
@@ -122,7 +122,7 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
       assert.isFalse(JSON.stringify(claude.mcpServers).includes(endpoint));
       assert.deepEqual(claude.mcpEnvironment, expectedEnv);
       const codexServer = (
-        codexThreadRuntimeParams({ threadId }).config.mcp_servers as {
+        codexThreadRuntimeParams({ mcpSession }).config.mcp_servers as {
           readonly "t3-code": unknown;
         }
       )["t3-code"];
@@ -131,7 +131,7 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
         args: ["--fixed"],
         env: expectedEnv,
       });
-      assert.deepEqual(cursorMcpServers(threadId), {
+      assert.deepEqual(cursorMcpServers(mcpSession), {
         "t3-code": { type: "stdio", command: binary, args: ["--fixed"], env: expectedEnv },
       });
       const openCode = openCodeT3McpConfig({
@@ -149,11 +149,12 @@ describe("t3-code MCP adapters honor T3_MCP_STDIO_WRAPPER", () => {
       // An ACP-native descriptor would win over the wrapper for agents that
       // advertise ACP MCP, leaving them with no t3-code tools.
       assert.deepEqual(
-        acpMcpActivation(threadId, { command: "/usr/bin/t3", entrypoint: "/usr/bin/t3" })
-          .acpMcpServers,
+        acpMcpActivation(
+          acpMcpContext(mcpSession, { command: "/usr/bin/t3", entrypoint: "/usr/bin/t3" }),
+        ).acpMcpServers,
         [],
       );
-      const acp = acpMcpServers(threadId, { command: "/usr/bin/t3", entrypoint: "/usr/bin/t3" });
+      const acp = acpMcpServers(mcpSession, { command: "/usr/bin/t3", entrypoint: "/usr/bin/t3" });
       assert.deepEqual(acp as unknown, [
         {
           name: "t3-code",
